@@ -4,6 +4,17 @@ import matplotlib.pyplot as plt
 import yfinance as yf
 from scipy.optimize import minimize
 import warnings
+import pandas as pd
+import matplotlib.pyplot as plt
+import yfinance as yf
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+import warnings
+
 warnings.filterwarnings('ignore')
 
 class HestonModel:
@@ -238,16 +249,6 @@ def create_visualizations(symbol, stock_data, S_paths, v_paths, heston):
     else:
         print("   📊 Volatility expected to remain STABLE")
 
-import pandas as pd
-import matplotlib.pyplot as plt
-import yfinance as yf
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
-import warnings
 warnings.filterwarnings('ignore')
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
