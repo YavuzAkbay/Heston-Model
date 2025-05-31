@@ -35,28 +35,22 @@ class HestonModel:
         """
         dt = self.T / n_steps
         
-        # Initialize arrays
         S = np.zeros((n_paths, n_steps + 1))
         v = np.zeros((n_paths, n_steps + 1))
         
-        # Set initial values
         S[:, 0] = self.S0
         v[:, 0] = self.v0
         
-        # Generate correlated random numbers
         for i in range(n_steps):
-            # Generate correlated Brownian motions
             Z1 = np.random.standard_normal(n_paths)
             Z2 = self.rho * Z1 + np.sqrt(1 - self.rho**2) * np.random.standard_normal(n_paths)
             
-            # Update variance (ensure non-negative)
             v[:, i + 1] = np.maximum(
                 v[:, i] + self.kappa * (self.theta - v[:, i]) * dt + 
                 self.xi * np.sqrt(np.maximum(v[:, i], 0)) * np.sqrt(dt) * Z2,
                 0
             )
             
-            # Update stock price
             S[:, i + 1] = S[:, i] * np.exp(
                 (self.r - 0.5 * v[:, i]) * dt + 
                 np.sqrt(np.maximum(v[:, i], 0)) * np.sqrt(dt) * Z1
@@ -71,10 +65,8 @@ def get_stock_data(symbol, period="3y"):
     stock = yf.Ticker(symbol)
     data = stock.history(period=period)
     
-    # Calculate daily returns
     data['Returns'] = data['Close'].pct_change().dropna()
     
-    # Calculate annualized volatility
     historical_vol = data['Returns'].std() * np.sqrt(252)
     
     return data, historical_vol
@@ -86,10 +78,10 @@ def get_risk_free_rate():
     try:
         tnx = yf.Ticker("^TNX")
         tnx_data = tnx.history(period="5d")
-        risk_free_rate = tnx_data['Close'].iloc[-1] / 100  # Convert percentage to decimal
+        risk_free_rate = tnx_data['Close'].iloc[-1] / 100
         return risk_free_rate
     except:
-        return 0.03  # Default 3% if data unavailable
+        return 0.03
 
 def calibrate_heston_simple(stock_data, historical_vol):
     """
@@ -97,34 +89,30 @@ def calibrate_heston_simple(stock_data, historical_vol):
     """
     returns = stock_data['Returns'].dropna()
     
-    # Estimate parameters from historical data
-    v0 = historical_vol**2  # Initial variance
-    theta = historical_vol**2  # Long-term variance
-    kappa = 2.0  # Mean reversion speed
-    xi = 0.3  # Vol of vol
-    rho = -0.7  # Typical negative correlation
+    v0 = historical_vol**2
+    theta = historical_vol**2
+    kappa = 2.0
+    xi = 0.3
+    rho = -0.7
     
     return v0, kappa, theta, xi, rho
 
-def analyze_stock_with_heston(symbol="AAPL", forecast_months=6):
+def analyze_stock_with_heston(symbol="PLTR", forecast_months=6):
     """
     Complete analysis of a stock using Heston model
     """
     print(f"🔍 Analyzing {symbol} with Heston Model")
     print("=" * 50)
     
-    # Get stock data
     stock_data, historical_vol = get_stock_data(symbol)
     current_price = stock_data['Close'].iloc[-1]
     
-    # Get risk-free rate
     risk_free_rate = get_risk_free_rate()
     
     print(f"📊 Current Price: ${current_price:.2f}")
     print(f"📈 Historical Volatility: {historical_vol:.1%}")
     print(f"🏦 Risk-free Rate: {risk_free_rate:.1%}")
     
-    # Calibrate Heston parameters
     v0, kappa, theta, xi, rho = calibrate_heston_simple(stock_data, historical_vol)
     
     print(f"\n🎯 Heston Model Parameters:")
@@ -134,15 +122,12 @@ def analyze_stock_with_heston(symbol="AAPL", forecast_months=6):
     print(f"   Vol of Vol (ξ): {xi:.2f}")
     print(f"   Correlation (ρ): {rho:.2f}")
     
-    # Initialize Heston model
-    T = forecast_months / 12  # Convert months to years
+    T = forecast_months / 12
     heston = HestonModel(current_price, v0, kappa, theta, xi, rho, risk_free_rate, T)
     
-    # Simulate paths
     print(f"\n🚀 Simulating {forecast_months}-month price paths...")
     S_paths, v_paths = heston.simulate_paths(n_paths=1000, n_steps=int(252 * T))
     
-    # Calculate statistics
     final_prices = S_paths[:, -1]
     price_percentiles = np.percentile(final_prices, [5, 25, 50, 75, 95])
     
@@ -153,11 +138,9 @@ def analyze_stock_with_heston(symbol="AAPL", forecast_months=6):
     print(f"   75th Percentile: ${price_percentiles[3]:.2f}")
     print(f"   95th Percentile: ${price_percentiles[4]:.2f}")
     
-    # Calculate potential returns
     median_return = (price_percentiles[2] - current_price) / current_price
     print(f"\n💰 Expected Return: {median_return:.1%}")
     
-    # Risk assessment
     downside_risk = (price_percentiles[0] - current_price) / current_price
     upside_potential = (price_percentiles[4] - current_price) / current_price
     
@@ -173,14 +156,11 @@ def create_visualizations(symbol, stock_data, S_paths, v_paths, heston):
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
     fig.suptitle(f'Heston Model Analysis for {symbol}', fontsize=16, fontweight='bold')
     
-    # 1. Historical Price vs Simulated Paths
     time_steps = np.linspace(0, heston.T, S_paths.shape[1])
     
-    # Plot sample paths
     for i in range(min(50, S_paths.shape[0])):
         ax1.plot(time_steps, S_paths[i], alpha=0.3, color='lightblue', linewidth=0.5)
     
-    # Plot percentiles
     percentiles = np.percentile(S_paths, [5, 25, 50, 75, 95], axis=0)
     ax1.plot(time_steps, percentiles[2], 'r-', linewidth=2, label='Median Path')
     ax1.fill_between(time_steps, percentiles[0], percentiles[4], alpha=0.2, color='red', label='90% Confidence')
@@ -193,7 +173,6 @@ def create_visualizations(symbol, stock_data, S_paths, v_paths, heston):
     ax1.legend()
     ax1.grid(True, alpha=0.3)
     
-    # 2. Volatility Evolution
     vol_paths = np.sqrt(v_paths)
     vol_percentiles = np.percentile(vol_paths, [5, 25, 50, 75, 95], axis=0)
     
@@ -209,7 +188,6 @@ def create_visualizations(symbol, stock_data, S_paths, v_paths, heston):
     ax2.legend()
     ax2.grid(True, alpha=0.3)
     
-    # 3. Final Price Distribution
     final_prices = S_paths[:, -1]
     ax3.hist(final_prices, bins=50, alpha=0.7, color='skyblue', edgecolor='black')
     ax3.axvline(x=heston.S0, color='red', linestyle='--', linewidth=2, label='Current Price')
@@ -220,8 +198,7 @@ def create_visualizations(symbol, stock_data, S_paths, v_paths, heston):
     ax3.legend()
     ax3.grid(True, alpha=0.3)
     
-    # 4. Historical vs Model Comparison
-    recent_data = stock_data.tail(252)  # Last year
+    recent_data = stock_data.tail(252)
     ax4.plot(recent_data.index, recent_data['Close'], 'b-', linewidth=2, label='Historical Price')
     ax4.set_title('Historical Price Performance')
     ax4.set_xlabel('Date')
@@ -232,7 +209,6 @@ def create_visualizations(symbol, stock_data, S_paths, v_paths, heston):
     plt.tight_layout()
     plt.show()
     
-    # Investment Insights
     print("\n" + "="*60)
     print("🎯 INVESTMENT INSIGHTS FOR SPOT INVESTORS")
     print("="*60)
@@ -262,7 +238,6 @@ def create_visualizations(symbol, stock_data, S_paths, v_paths, heston):
     else:
         print("   📊 Volatility expected to remain STABLE")
 
-# Run the analysisimport numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import yfinance as yf
@@ -275,7 +250,6 @@ from sklearn.model_selection import train_test_split
 import warnings
 warnings.filterwarnings('ignore')
 
-# Set device
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {device}")
 
@@ -287,7 +261,6 @@ class DeepDifferentialHeston(nn.Module):
     def __init__(self, input_dim=5, hidden_dims=[128, 256, 128, 64], output_dim=1):
         super(DeepDifferentialHeston, self).__init__()
         
-        # Build the network layers
         layers = []
         prev_dim = input_dim
         
@@ -300,12 +273,10 @@ class DeepDifferentialHeston(nn.Module):
             ])
             prev_dim = hidden_dim
         
-        # Output layer
         layers.append(nn.Linear(prev_dim, output_dim))
         
         self.network = nn.Sequential(*layers)
         
-        # Initialize weights
         self.apply(self._init_weights)
     
     def _init_weights(self, module):
@@ -326,15 +297,12 @@ class VolatilityForecastingNetwork(nn.Module):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         
-        # LSTM layers
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, 
                            batch_first=True, dropout=0.2)
         
-        # Attention mechanism
         self.attention = nn.MultiheadAttention(hidden_size, num_heads=8, 
                                              dropout=0.1, batch_first=True)
         
-        # Output layers
         self.fc_layers = nn.Sequential(
             nn.Linear(hidden_size, hidden_size // 2),
             nn.ReLU(),
@@ -342,17 +310,14 @@ class VolatilityForecastingNetwork(nn.Module):
             nn.Linear(hidden_size // 2, hidden_size // 4),
             nn.ReLU(),
             nn.Linear(hidden_size // 4, output_size),
-            nn.Sigmoid()  # Ensure positive volatility
+            nn.Sigmoid()
         )
         
     def forward(self, x):
-        # LSTM forward pass
         lstm_out, (h_n, c_n) = self.lstm(x)
         
-        # Apply attention
         attn_out, _ = self.attention(lstm_out, lstm_out, lstm_out)
         
-        # Use the last output
         output = self.fc_layers(attn_out[:, -1, :])
         
         return output
@@ -363,15 +328,12 @@ class EnhancedHestonML:
         self.r = r
         self.T = T
         
-        # Initialize networks
         self.param_network = DeepDifferentialHeston().to(device)
         self.vol_network = VolatilityForecastingNetwork().to(device)
         
-        # Scalers for normalization
         self.param_scaler = StandardScaler()
         self.vol_scaler = StandardScaler()
         
-        # Training history
         self.training_history = {'param_loss': [], 'vol_loss': []}
         
     def generate_training_data(self, n_samples=50000):
@@ -380,24 +342,21 @@ class EnhancedHestonML:
         """
         print("🔄 Generating training data...")
         
-        # Parameter ranges based on market observations
         kappa_range = (0.1, 5.0)
         theta_range = (0.01, 0.5)
         xi_range = (0.1, 1.0)
         rho_range = (-0.9, -0.1)
         v0_range = (0.01, 0.5)
         
-        # Generate parameter combinations using Latin Hypercube Sampling
         np.random.seed(42)
         
         params = np.random.uniform(0, 1, (n_samples, 5))
-        params[:, 0] = params[:, 0] * (kappa_range[1] - kappa_range[0]) + kappa_range[0]  # kappa
-        params[:, 1] = params[:, 1] * (theta_range[1] - theta_range[0]) + theta_range[0]  # theta
-        params[:, 2] = params[:, 2] * (xi_range[1] - xi_range[0]) + xi_range[0]          # xi
-        params[:, 3] = params[:, 3] * (rho_range[1] - rho_range[0]) + rho_range[0]      # rho
-        params[:, 4] = params[:, 4] * (v0_range[1] - v0_range[0]) + v0_range[0]         # v0
+        params[:, 0] = params[:, 0] * (kappa_range[1] - kappa_range[0]) + kappa_range[0]
+        params[:, 1] = params[:, 1] * (theta_range[1] - theta_range[0]) + theta_range[0]
+        params[:, 2] = params[:, 2] * (xi_range[1] - xi_range[0]) + xi_range[0]
+        params[:, 3] = params[:, 3] * (rho_range[1] - rho_range[0]) + rho_range[0]
+        params[:, 4] = params[:, 4] * (v0_range[1] - v0_range[0]) + v0_range[0]
         
-        # Generate corresponding option prices using analytical Heston formula
         prices = []
         volatilities = []
         
@@ -407,8 +366,6 @@ class EnhancedHestonML:
             
             kappa, theta, xi, rho, v0 = param_set
             
-            # Simulate a simple price using approximation
-            # In practice, you'd use the full Heston characteristic function
             vol_approx = np.sqrt(v0 + theta) / 2
             price_approx = self.S0 * np.exp((self.r - 0.5 * vol_approx**2) * self.T + 
                                           vol_approx * np.sqrt(self.T) * np.random.normal())
@@ -424,26 +381,21 @@ class EnhancedHestonML:
         """
         returns = stock_data['Returns'].dropna()
         
-        # Calculate rolling volatility and other features
         features = []
         for i in range(len(returns)):
             if i >= sequence_length:
                 window_returns = returns.iloc[i-sequence_length:i]
                 
-                # Feature engineering
                 vol = window_returns.std() * np.sqrt(252)
                 skew = window_returns.skew()
                 kurt = window_returns.kurtosis()
                 momentum = window_returns.mean()
                 
-                # Technical indicators
                 sma_5 = window_returns.tail(5).mean()
                 sma_20 = window_returns.mean()
                 
-                # Volatility clustering features
                 vol_change = vol - (returns.iloc[i-sequence_length-1:i-1].std() * np.sqrt(252))
                 
-                # Market stress indicators
                 extreme_moves = (np.abs(window_returns) > 2 * window_returns.std()).sum()
                 
                 feature_vector = [vol, skew, kurt, momentum, sma_5, sma_20, 
@@ -459,30 +411,24 @@ class EnhancedHestonML:
         print("🚀 Training Enhanced Heston ML Networks")
         print("=" * 50)
         
-        # Train parameter network
         print("📊 Training Parameter Calibration Network...")
         params, prices, _ = self.generate_training_data()
         
-        # Normalize data
         params_norm = self.param_scaler.fit_transform(params)
         prices_norm = (prices - prices.mean()) / prices.std()
         
-        # Convert to tensors
         X_param = torch.FloatTensor(params_norm).to(device)
         y_param = torch.FloatTensor(prices_norm.reshape(-1, 1)).to(device)
         
-        # Split data
         X_train, X_val, y_train, y_val = train_test_split(
             X_param, y_param, test_size=0.2, random_state=42
         )
         
-        # Create data loaders
         train_dataset = TensorDataset(X_train, y_train)
         val_dataset = TensorDataset(X_val, y_val)
         train_loader = DataLoader(train_dataset, batch_size=512, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=512)
         
-        # Train parameter network
         optimizer_param = optim.AdamW(self.param_network.parameters(), lr=0.001, weight_decay=1e-5)
         scheduler_param = optim.lr_scheduler.ReduceLROnPlateau(optimizer_param, patience=10)
         criterion = nn.MSELoss()
@@ -490,7 +436,6 @@ class EnhancedHestonML:
         best_val_loss = float('inf')
         
         for epoch in range(epochs_param):
-            # Training
             self.param_network.train()
             train_loss = 0
             for batch_X, batch_y in train_loader:
@@ -502,7 +447,6 @@ class EnhancedHestonML:
                 optimizer_param.step()
                 train_loss += loss.item()
             
-            # Validation
             self.param_network.eval()
             val_loss = 0
             with torch.no_grad():
@@ -523,37 +467,30 @@ class EnhancedHestonML:
             if epoch % 20 == 0:
                 print(f"   Epoch {epoch}: Train Loss: {avg_train_loss:.6f}, Val Loss: {avg_val_loss:.6f}")
         
-        # Train volatility forecasting network
         print("\n📈 Training Volatility Forecasting Network...")
         X_vol, y_vol = self.prepare_volatility_sequences(stock_data)
         
         if len(X_vol) > 0:
-            # Normalize volatility data
             X_vol_norm = self.vol_scaler.fit_transform(X_vol)
             
-            # Convert to tensors and reshape for LSTM
             X_vol_tensor = torch.FloatTensor(X_vol_norm).unsqueeze(1).to(device)  # Add sequence dimension
             y_vol_tensor = torch.FloatTensor(y_vol.reshape(-1, 1)).to(device)
             
-            # Split data
             X_vol_train, X_vol_val, y_vol_train, y_vol_val = train_test_split(
                 X_vol_tensor, y_vol_tensor, test_size=0.2, random_state=42
             )
             
-            # Create data loaders
             vol_train_dataset = TensorDataset(X_vol_train, y_vol_train)
             vol_val_dataset = TensorDataset(X_vol_val, y_vol_val)
             vol_train_loader = DataLoader(vol_train_dataset, batch_size=64, shuffle=True)
             vol_val_loader = DataLoader(vol_val_dataset, batch_size=64)
             
-            # Train volatility network
             optimizer_vol = optim.AdamW(self.vol_network.parameters(), lr=0.001, weight_decay=1e-5)
             scheduler_vol = optim.lr_scheduler.ReduceLROnPlateau(optimizer_vol, patience=15)
             
             best_vol_loss = float('inf')
             
             for epoch in range(epochs_vol):
-                # Training
                 self.vol_network.train()
                 train_loss = 0
                 for batch_X, batch_y in vol_train_loader:
@@ -565,7 +502,6 @@ class EnhancedHestonML:
                     optimizer_vol.step()
                     train_loss += loss.item()
                 
-                # Validation
                 self.vol_network.eval()
                 val_loss = 0
                 with torch.no_grad():
@@ -594,7 +530,6 @@ class EnhancedHestonML:
         """
         print(f"\n🎯 Generating Enhanced ML Forecasts for {forecast_months} months")
         
-        # Load best models
         try:
             self.param_network.load_state_dict(torch.load('best_param_network.pth'))
             self.vol_network.load_state_dict(torch.load('best_vol_network.pth'))
@@ -604,12 +539,10 @@ class EnhancedHestonML:
         self.param_network.eval()
         self.vol_network.eval()
         
-        # Get current market conditions
         current_price = stock_data['Close'].iloc[-1]
         recent_returns = stock_data['Returns'].dropna().tail(20)
         current_vol = recent_returns.std() * np.sqrt(252)
         
-        # Prepare features for volatility prediction
         X_vol_current, _ = self.prepare_volatility_sequences(stock_data.tail(50))
         if len(X_vol_current) > 0:
             X_vol_norm = self.vol_scaler.transform(X_vol_current[-1:])
@@ -620,37 +553,30 @@ class EnhancedHestonML:
         else:
             predicted_vol = current_vol
         
-        # Enhanced parameter estimation using ML
         market_features = np.array([[
-            2.0,  # kappa estimate
-            predicted_vol**2,  # theta from ML prediction
-            0.3,  # xi estimate
-            -0.7,  # rho estimate  
-            current_vol**2  # v0 current
+            2.0,
+            predicted_vol**2,
+            0.3,
+            -0.7,
+            current_vol**2
         ]])
         
-        # Simulate enhanced paths
         T = forecast_months / 12
         dt = T / 252
         n_steps = int(252 * T)
         
-        # Initialize arrays
         S_paths = np.zeros((n_simulations, n_steps + 1))
         v_paths = np.zeros((n_simulations, n_steps + 1))
         
         S_paths[:, 0] = current_price
         v_paths[:, 0] = current_vol**2
         
-        # Enhanced simulation with time-varying parameters
         for i in range(n_steps):
-            # Generate correlated random numbers
             Z1 = np.random.standard_normal(n_simulations)
             Z2 = -0.7 * Z1 + np.sqrt(1 - 0.7**2) * np.random.standard_normal(n_simulations)
             
-            # Time-varying volatility adjustment
-            vol_adjustment = 1 + 0.1 * np.sin(2 * np.pi * i / 252)  # Seasonal adjustment
+            vol_adjustment = 1 + 0.1 * np.sin(2 * np.pi * i / 252)
             
-            # Update variance with ML enhancement
             kappa_t = 2.0 * vol_adjustment
             theta_t = predicted_vol**2
             xi_t = 0.3
@@ -658,10 +584,9 @@ class EnhancedHestonML:
             v_paths[:, i + 1] = np.maximum(
                 v_paths[:, i] + kappa_t * (theta_t - v_paths[:, i]) * dt + 
                 xi_t * np.sqrt(np.maximum(v_paths[:, i], 0)) * np.sqrt(dt) * Z2,
-                0.001  # Minimum variance floor
+                0.001
             )
             
-            # Update stock price
             S_paths[:, i + 1] = S_paths[:, i] * np.exp(
                 (self.r - 0.5 * v_paths[:, i]) * dt + 
                 np.sqrt(np.maximum(v_paths[:, i], 0)) * np.sqrt(dt) * Z1
@@ -678,14 +603,11 @@ class EnhancedHestonML:
         
         time_steps = np.linspace(0, self.T, S_paths.shape[1])
         
-        # 1. Enhanced Price Paths with Confidence Intervals
         percentiles = np.percentile(S_paths, [5, 10, 25, 50, 75, 90, 95], axis=0)
         
-        # Plot sample paths
         for i in range(min(30, S_paths.shape[0])):
             ax1.plot(time_steps, S_paths[i], alpha=0.2, color='lightblue', linewidth=0.5)
         
-        # Plot enhanced confidence bands
         ax1.plot(time_steps, percentiles[3], 'r-', linewidth=3, label='ML-Enhanced Median')
         ax1.fill_between(time_steps, percentiles[0], percentiles[6], alpha=0.15, color='red', label='90% Confidence')
         ax1.fill_between(time_steps, percentiles[1], percentiles[5], alpha=0.25, color='orange', label='80% Confidence')
@@ -698,7 +620,6 @@ class EnhancedHestonML:
         ax1.legend()
         ax1.grid(True, alpha=0.3)
         
-        # 2. Volatility Evolution with ML Prediction
         vol_paths = np.sqrt(v_paths)
         vol_percentiles = np.percentile(vol_paths, [5, 25, 50, 75, 95], axis=0)
         
@@ -714,7 +635,6 @@ class EnhancedHestonML:
         ax2.legend()
         ax2.grid(True, alpha=0.3)
         
-        # 3. Training Loss History
         if self.training_history['param_loss']:
             ax3.plot(self.training_history['param_loss'], 'b-', label='Parameter Network')
         if self.training_history['vol_loss']:
@@ -726,7 +646,6 @@ class EnhancedHestonML:
         ax3.grid(True, alpha=0.3)
         ax3.set_yscale('log')
         
-        # 4. Risk-Return Analysis
         final_prices = S_paths[:, -1]
         returns = (final_prices - self.S0) / self.S0
         
@@ -734,7 +653,6 @@ class EnhancedHestonML:
         ax4.axvline(x=0, color='red', linestyle='--', linewidth=2, label='Break-even')
         ax4.axvline(x=np.median(returns), color='green', linestyle='-', linewidth=2, label='Expected Return')
         
-        # Add risk metrics
         var_95 = np.percentile(returns, 5)
         cvar_95 = returns[returns <= var_95].mean()
         ax4.axvline(x=var_95, color='orange', linestyle=':', linewidth=2, label=f'VaR 95%: {var_95:.1%}')
@@ -748,7 +666,6 @@ class EnhancedHestonML:
         plt.tight_layout()
         plt.show()
         
-        # Enhanced Investment Insights
         print("\n" + "="*70)
         print("🤖 ENHANCED ML INVESTMENT INSIGHTS")
         print("="*70)
@@ -764,13 +681,11 @@ class EnhancedHestonML:
         print(f"   Value at Risk (95%): {var_95:.1%}")
         print(f"   Conditional VaR: {cvar_95:.1%}")
         
-        # ML-specific insights
         vol_stability = np.std(vol_percentiles[2])
         print(f"\n🧠 ML Model Insights:")
         print(f"   Predicted Future Volatility: {predicted_vol:.1%}")
         print(f"   Volatility Stability Score: {1/vol_stability:.2f}")
         
-        # Enhanced recommendation system
         risk_score = abs(var_95) * 100
         return_score = avg_return * 100
         ml_confidence = 1 - (np.std(self.training_history['param_loss'][-10:]) if len(self.training_history['param_loss']) >= 10 else 0.1)
@@ -789,19 +704,17 @@ class EnhancedHestonML:
         else:
             print("⚠️  AVOID: High downside risk detected by ML models")
 
-def run_enhanced_analysis(symbol="AAPL", forecast_months=6):
+def run_enhanced_analysis(symbol="PLTR", forecast_months=6):
     """
     Run complete enhanced ML Heston analysis
     """
     print(f"🚀 Enhanced ML Heston Analysis for {symbol}")
     print("="*60)
     
-    # Get data
     stock = yf.Ticker(symbol)
     stock_data = stock.history(period="3y")
     stock_data['Returns'] = stock_data['Close'].pct_change()
     
-    # Get risk-free rate
     try:
         tnx = yf.Ticker("^TNX")
         tnx_data = tnx.history(period="5d")
@@ -814,25 +727,20 @@ def run_enhanced_analysis(symbol="AAPL", forecast_months=6):
     print(f"📊 Current Price: ${current_price:.2f}")
     print(f"🏦 Risk-free Rate: {risk_free_rate:.1%}")
     
-    # Initialize enhanced model
     enhanced_heston = EnhancedHestonML(current_price, risk_free_rate, forecast_months/12)
     
-    # Train the networks
     enhanced_heston.train_networks(stock_data, epochs_param=50, epochs_vol=100)
     
-    # Generate enhanced forecasts
     S_paths, v_paths, predicted_vol = enhanced_heston.enhanced_forecast(
         stock_data, forecast_months, n_simulations=3000
     )
     
-    # Create visualizations
     enhanced_heston.create_enhanced_visualizations(
         symbol, stock_data, S_paths, v_paths, predicted_vol
     )
     
     return enhanced_heston, S_paths, v_paths
 
-# Run the enhanced analysis
 if __name__ == "__main__":
     symbol = "PLTR"
     stock_data, S_paths, v_paths, heston_model = analyze_stock_with_heston(symbol, forecast_months=12)
@@ -840,7 +748,6 @@ if __name__ == "__main__":
     print(f"\n🔄 To analyze different stocks, change the symbol")
     print(f"⚙️  Model automatically adapts to market conditions using ML")
     print(f"🎯 Enhanced forecasting incorporates pattern recognition and regime detection")
-    # Create visualizations
     create_visualizations(symbol, stock_data, S_paths, v_paths, heston_model)
     
     print(f"\n🔄 To analyze a different stock, change the symbol variable")
